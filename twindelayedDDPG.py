@@ -11,7 +11,7 @@ import wandb
 class ReplayBuffer(): #cuva prethodno nauceno
     def __init__(self, max_size, input_shape, n_actions):
         #max_size - max broj tranzicija sto cuva
-        #input_shape - oblik obzervovanih stanja (24,) u nasem slucaju
+        #input_shape - dimenzije obzervovanih stanja (24,) u nasem slucaju
         #n_actions - broj akcija, ali s obzirom da radimo sa kontinualnim sistemom
         #            predstavlja broj dimenzija akcije 
         self.mem_size = max_size
@@ -62,7 +62,7 @@ class CriticNetwork(nn.Module): #evaluira koliko je neka akcija dobra za neko st
         self.checkpoint_file = os.path.join(self.checkpoint_dir,name+'_td3')
 
         self.fullyConnectedL1 = nn.Linear(self.input_dims[0]+n_actions, self.fullyConnectedL1_dims)#input layer
-        self.fullyConnectedL2 = nn.Linear(self.fullyConnectedL1_dims, self.fullyConnectedL2_dims)#hiddem layer
+        self.fullyConnectedL2 = nn.Linear(self.fullyConnectedL1_dims, self.fullyConnectedL2_dims)#hidden layer
         self.q1 = nn.Linear(self.fullyConnectedL2_dims, 1)#output layer, daje prediktovanu Q vrednost (skalar)
 
         self.optimizer = optim.Adam(self.parameters(), lr=beta)
