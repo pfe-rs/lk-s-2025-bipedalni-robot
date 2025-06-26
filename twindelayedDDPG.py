@@ -5,15 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import os
-import matplotlib.pyplot as plt
+import wandb
 
-def plot_learning_curve(x, scores, figure_file):
-    running_avg = np.zeros(len(scores))
-    for i in range(len(running_avg)):
-        running_avg[i] = np.mean(scores[max(0, i-100):(i+1)])
-    plt.plot(x, running_avg)
-    plt.title('Running average of previous 100 scores')
-    plt.savefig(figure_file)
 
 class ReplayBuffer(): #cuva prethodno nauceno
     def __init__(self, max_size, input_shape, n_actions):
@@ -287,7 +280,22 @@ agent = Agent(alpha=0.001, beta=0.001,
         env=env, batch_size=100, layer1_size=400, layer2_size=300,
         n_actions=env.action_space.shape[0])
 n_games = 1000
-filename = 'plots/' + 'walker_' + str(n_games) + '_games.png'
+
+wandb.init(
+      # Set the project where this run will be logged
+      project="bipedal-Ql",
+      # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
+      name=f"TD3",
+      # Track hyperparameters and run metadata
+      config={
+      "algorithm": "TD3",
+      "batch size":agent.batch_size,
+      "alpha": agent.alpha,
+      "beta": agent.beta,
+      "layer 1 size":agent.layer1_size,
+      "layer 2 size":agent.layer2_size,
+      "episodes": n_games,
+      })
 
 best_score = -1000
 score_history = []
@@ -306,6 +314,7 @@ for i in range(n_games):
         agent.learn()
         score += reward
         observation = observation_
+    wandb.log({"episode": i, "score": score})
     score_history.append(score)
     avg_score = np.mean(score_history[-100:])
 
@@ -317,4 +326,4 @@ for i in range(n_games):
             'average score %.1f' % avg_score)
 
 x = [i+1 for i in range(n_games)]
-plot_learning_curve(x, score_history, filename)
+wandb.finish()
