@@ -171,7 +171,7 @@ class Agent():
     def learn(self):
         if self.memory.mem_counter < self.batch_size: #ne treniramo model ako nema dovoljno podataka za jedan batch
             return
-        state, action, reward, new_state, done = self.memory.sample_buffer(self.batch_size)
+        state, action, reward, new_state, done = self.memory.sample_buffer(self.batch_size)#sempluj random podatke iz batcha
 
         reward = T.tensor(reward, dtype=T.float).to(self.critic1.device)
         done = T.tensor(done).to(self.critic1.device)
@@ -179,7 +179,7 @@ class Agent():
         state = T.tensor(state, dtype=T.float).to(self.critic1.device)
         action = T.tensor(action, dtype=T.float).to(self.critic1.device)
 
-        #pravimo target mreze
+        #feedforwardujemo kroz target mreže i dodajemo šum
         target_actions = self.target_actor.forward(new_state)
         target_actions = target_actions + T.clamp(T.tensor(np.random.normal(scale=0.2, size=target_actions.shape), dtype=T.float).to(self.actor.device), -0.5, 0.5)
         target_actions = T.clamp(target_actions,self.min_action[0],self.max_action[0])
@@ -229,7 +229,7 @@ class Agent():
         self.update_network_parameters()
 
     def update_network_parameters(self, tau=None):
-        if tau is None:#tau je onaj vrlo mali broj
+        if tau is None:#tau je onaj vrlo mali broj - smoothing factor
             tau = self.tau
         
         actor_params = self.actor.named_parameters()
