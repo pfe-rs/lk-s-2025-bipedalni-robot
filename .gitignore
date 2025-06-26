@@ -1,3 +1,9 @@
 __pycache__/
 wandb/
 cao.py
+/model
+dqn_model
+dqn_model_actions
+main.py
+qlearningclass.py
+dqn.py
