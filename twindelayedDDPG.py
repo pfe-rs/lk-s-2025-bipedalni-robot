@@ -130,6 +130,9 @@ class Agent():
     def __init__(self, alpha, beta, input_dims, tau, env, gamma=0.99, update_actor_interval=2,
                  warmup=1000, n_actions=2, max_size=1000000, layer1_size=400, layer2_size=300, batch_size=100, noise =0.1):
                 #vrednosti preuzete iz referentnog rada
+        self.layer1_size=layer1_size
+        self.layer2_size=layer2_size
+        self.alpha=alpha
         self.gamma = gamma
         self.tau = tau
         self.max_action = env.action_space.high
@@ -291,7 +294,7 @@ wandb.init(
       "algorithm": "TD3",
       "batch size":agent.batch_size,
       "alpha": agent.alpha,
-      "beta": agent.beta,
+      "beta": agent.gamma,
       "layer 1 size":agent.layer1_size,
       "layer 2 size":agent.layer2_size,
       "episodes": n_games,
@@ -300,7 +303,10 @@ wandb.init(
 best_score = -1000
 score_history = []
 
-agent.load_models()
+
+# Ensure the 'model' directory exists
+if os.path.exists('./model/actor_td3'):
+    agent.load_models()
 
 for i in range(n_games):
     observation, info = env.reset()
