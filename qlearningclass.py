@@ -30,6 +30,7 @@ class qLearning():
         self.n_games=n_games
         self.alpha=alpha
         self.gamma=gamma
+        self.render=render
         self.epsilon=1
         wandb.init(
         # Set the project where this run will be logged
@@ -59,7 +60,7 @@ class qLearning():
 
         new_value = current + (self.alpha * (target - current)) #Temporal Difference Update (TD Update) - formula za racunanje novih qValues
         return new_value
-    def convertNextAction(nextAction): #pretvaramo diskretne podatke u kontinualne da bi BipedalWalker mogao da hoda
+    def convertNextAction(self,nextAction): #pretvaramo diskretne podatke u kontinualne da bi BipedalWalker mogao da hoda
         action = []
 
         for i in range(len(nextAction)):
@@ -81,15 +82,14 @@ class qLearning():
     def discretizeState(self,state): #prebacuje kontinualne podatke u diskretne kako ne bismo imali beskonacno mnogo podataka u qTable
         discreteState = []
         for i in range (len(state)): #prolazimo kroz svih 14 state value-a
-            print()
             normalized = (state[i] - stateBounds[i][0]) / (stateBounds[i][1] - stateBounds[i][0]) #pretvaramo sve u range [0,1]
             scaled = normalized*19 #skaliramo jer koristimo 20 diskretnih binova
             index = int(scaled) 
             discreteState.append(index)
         return tuple(discreteState)
     def runOneEpisode(self, i):
-
-        self.env.render()
+        if self.render:
+            self.env.render()
         print("Episode: " + str(i))
 
         obs, info = self.env.reset() #treba nam samo obzervacija, info zanemarujemo za treniranje
@@ -107,7 +107,7 @@ class qLearning():
 
             nextState = self.discretizeState(nextState[0:14])
 
-            cumulated_reward += reward
+            self.cumulated_reward += reward
 
             self.qTable[state][nextActionDisc] = self.updateQTable(state,nextActionDisc,reward,nextState)
             state = nextState
@@ -115,15 +115,15 @@ class qLearning():
             if done:
                 break
         
-        if cumulated_reward > self.highscore:
-            self.highscore = cumulated_reward
+        if self.cumulated_reward > self.highscore:
+            self.highscore = self.cumulated_reward
         
-        return cumulated_reward
+        return self.cumulated_reward
     def run_algorithm(self):
         for i in range(1, self.n_games+1):
             epScore = self.runOneEpisode(i)
             print("Zavrsena epizoda. Nacrtana tacka na grafiku.")
             wandb.log({"episode": i, "epsilon":self.epsilon,"score": epScore})
-        print("Zavrseno treniranje. HIGHSCORE: " + str(HIGHSCORE))
+        print("Zavrseno treniranje. HIGHSCORE: " + str(self.highscore))
         wandb.finish()
         self.env.close()
