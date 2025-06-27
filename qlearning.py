@@ -5,10 +5,11 @@ import random
 from collections import defaultdict
 import wandb
 
+
 run=6
-NUM_OF_EPISODES = 100 #broj epizoda koliko treniramo model
+NUM_OF_EPISODES = 1 #broj epizoda koliko treniramo model
 ALPHA = 0.01 #learning rate
-GAMMA = 0.3 #discount factor
+GAMMA = 0.99 #discount factor
 HIGHSCORE = -200 #treba da bude manji od najmanje vrednosti koju mozemo dobiti
 
 stateBounds = [(0, math.pi),   # Ugao tela robota
@@ -31,6 +32,7 @@ actionBounds = (-1, 1)
 def discretizeState(state): #prebacuje kontinualne podatke u diskretne kako ne bismo imali beskonacno mnogo podataka u qTable
     discreteState = []
     for i in range (len(state)): #prolazimo kroz svih 14 state value-a
+        print()
         normalized = (state[i] - stateBounds[i][0]) / (stateBounds[i][1] - stateBounds[i][0]) #pretvaramo sve u range [0,1]
         scaled = normalized*19 #skaliramo jer koristimo 20 diskretnih binova
         index = int(scaled) 
@@ -73,15 +75,6 @@ def updateQTable(qTable, state, action, reward, nextState = None):
 
     new_value = current + (ALPHA * (target - current)) #Temporal Difference Update (TD Update) - formula za racunanje novih qValues
     return new_value
-
-def plotEpisode(myGraph, xval, yval, epScore, plotLine, i): #f-ja za plotovanje rezultata i cuvanje kao png
-                                                            #za svaku epizodu nacrta jednu tacku na grafiku
-    xval.append(i)
-    yval.append(epScore)
-
-    plotLine.set_xdata(xval)
-    plotLine.set_ydata(yval)
-    myGraph.savefig("./plot")
 
 def runOneEpisode(env, i, qTable):
     global HIGHSCORE
@@ -132,7 +125,7 @@ wandb.init(
       "algorithm": "Q-Learning",
       "alpha": ALPHA,
       "gamma": GAMMA,
-      "episodes": 100,
+      "episodes": NUM_OF_EPISODES,
       })
 
 
