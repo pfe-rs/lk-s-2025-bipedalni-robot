@@ -35,7 +35,7 @@ class qLearning():
         # Set the project where this run will be logged
         project="bipedal-Ql",
         # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-        name=f"experiment_{run}",
+        name=f"Q-learning",
         # Track hyperparameters and run metadata
         config={
         "algorithm": "Q-Learning",
@@ -46,7 +46,29 @@ class qLearning():
         self.highscore=-100000
         self.observation,info=self.env.reset(seed=42)
         self.cumulated_reward=0
-        
+    def updateQTable(self,state, action, reward, nextState = None):
+        current = self.qTable[state][action] #trenutni akcija-stanje par
+
+        if nextState is not None:
+            qValues = self.qTable[nextState] # Uzimamo qValues svih akcija za sledece stanje
+            qNext = np.max(qValues) # Uzimamo najvecu qValue - zbog pretpostavke da cemo dobiti najvecu nagradu
+        else:
+            qNext = 0 # Ako je proces terminated ili trunctuted, nece biti nextState, samim tim nece biti ni nagrade
+
+        target = reward + (self.gamma * qNext) #Bellmanovom formulom racunamo target qValue
+
+        new_value = current + (self.alpha * (target - current)) #Temporal Difference Update (TD Update) - formula za racunanje novih qValues
+        return new_value
+    def convertNextAction(nextAction): #pretvaramo diskretne podatke u kontinualne da bi BipedalWalker mogao da hoda
+        action = []
+
+        for i in range(len(nextAction)):
+            nextVal = nextAction[i]/9*2-1   # /9 da bi prebacio trenutne vrednosti u range [0,1]
+                                            # *2 da bismo imali vrednosti [0,2]
+                                            # -1 da bismo imali vrednosti [-1,1] sto nam je uslov zadatka
+            action.append(nextVal)
+        return tuple(action)
+
     def getNextAction(self,state):
         if random.random() < self.epsilon:
             action = ()
@@ -77,17 +99,17 @@ class qLearning():
         self.epsilon = float(1.0 / (i*0.004))
 
         while True:
-            nextActionDisc = getNextAction(state)
-            nextAction = convertNextAction(nextActionDisc)
+            nextActionDisc = self.getNextAction(state)
+            nextAction = self.convertNextAction(nextActionDisc)
 
             nextState, reward, terminated, truncated, info = self.env.step(nextAction)
             done = terminated or truncated
 
-            nextState = discretizeState(nextState[0:14])
+            nextState = self.discretizeState(nextState[0:14])
 
             cumulated_reward += reward
 
-            self.qTable[state][nextActionDisc] = updateQTable(qTable,state,nextActionDisc,reward,nextState)
+            self.qTable[state][nextActionDisc] = self.updateQTable(state,nextActionDisc,reward,nextState)
             state = nextState
 
             if done:
@@ -102,3 +124,6 @@ class qLearning():
             epScore = self.runOneEpisode(i)
             print("Zavrsena epizoda. Nacrtana tacka na grafiku.")
             wandb.log({"episode": i, "epsilon":self.epsilon,"score": epScore})
+        print("Zavrseno treniranje. HIGHSCORE: " + str(HIGHSCORE))
+        wandb.finish()
+        self.env.close()
