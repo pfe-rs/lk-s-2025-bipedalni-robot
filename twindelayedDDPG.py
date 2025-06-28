@@ -6,7 +6,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 import os
 import wandb
-
+from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
+import glob
 
 class ReplayBuffer(): #cuva prethodno nauceno
     def __init__(self, max_size, input_shape, n_actions):
@@ -126,6 +127,14 @@ class ActorNetwork(nn.Module):
         print('...loading checkpoint...')
         self.load_state_dict(T.load(self.checkpoint_file))
 
+def get_gradient_norm(model):
+        total_norm = 0.0
+        for p in model.parameters():
+            if p.grad is not None:
+                param_norm = p.grad.data.norm(2)
+                total_norm += param_norm.item() ** 2
+        return total_norm ** 0.5
+
 class Agent():
     def __init__(self, alpha, beta, input_dims, tau, env, gamma=0.99, update_actor_interval=2,
                  warmup=1000, n_actions=2, max_size=1000000, layer1_size=400, layer2_size=300, batch_size=100, noise =0.1):
@@ -214,6 +223,10 @@ class Agent():
         q2_loss = F.mse_loss(target,q2)
         critic_loss = q1_loss + q2_loss
         critic_loss.backward()
+
+        critic1_grad_norm = get_gradient_norm(self.critic1)
+        critic2_grad_norm = get_gradient_norm(self.critic2)
+
         self.critic1.optimizer.step()
         self.critic2.optimizer.step()
 
@@ -230,6 +243,22 @@ class Agent():
         self.actor.optimizer.step()
 
         self.update_network_parameters()
+
+        if self.learn_step_counter % self.update_actor_interval == 0:
+            actor_grad_norm = get_gradient_norm(self.actor)
+            wandb.log({
+                "actor_grad_norm": actor_grad_norm,
+                 "actor_loss": actor_loss.item()
+            })
+
+        wandb.log({
+           "critic_loss": critic_loss.item(),
+            "q1_loss": q1_loss.item(),
+            "q2_loss": q2_loss.item(),
+            "critic1_grad_norm": critic1_grad_norm,
+            "critic2_grad_norm": critic2_grad_norm,
+            "training_step": self.learn_step_counter
+        })
 
     def update_network_parameters(self, tau=None):
         if tau is None:#tau je onaj vrlo mali broj
@@ -277,7 +306,14 @@ class Agent():
         self.target_critic1.load_checkpoint()
         self.target_critic2.load_checkpoint()
 
-env = gym.make('BipedalWalker-v3', render_mode='human')
+training_period = 100
+env = gym.make('BipedalWalker-v3', render_mode="rgb_array")
+env = RecordVideo(env,
+                video_folder="td3_training_video",
+                name_prefix="training",
+                episode_trigger=lambda x: x % training_period == 0  # Only record every 250th episode
+                )
+
 agent = Agent(alpha=0.001, beta=0.001,
         input_dims=env.observation_space.shape, tau=0.005,
         env=env, batch_size=100, layer1_size=400, layer2_size=300,
@@ -291,7 +327,7 @@ wandb.init(
       name=f"TD3",
       # Track hyperparameters and run metadata
       config={
-      "algorithm": "TD3",
+      "algorithm": "TD3 bez paralelizacije",
       "batch size":agent.batch_size,
       "alpha": agent.alpha,
       "beta": agent.gamma,
@@ -330,6 +366,15 @@ for i in range(n_games):
 
     print('episode ', i, 'score %.1f' % score,
             'average score %.1f' % avg_score)
+    
+video_folder = "./td3_training_video"
+video_files = glob.glob(os.path.join(video_folder, "*.mp4"))
 
+for video_path in video_files:
+    video_name = os.path.basename(video_path)
+    wandb.log({
+        video_name: wandb.Video(video_path,  format="mp4")
+    })
 
 wandb.finish()
+env.close()

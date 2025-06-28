@@ -130,6 +130,14 @@ class ActorNetwork(nn.Module):
         print('...loading checkpoint...')
         self.load_state_dict(T.load(self.checkpoint_file))
 
+def get_gradient_norm(model):
+        total_norm = 0.0
+        for p in model.parameters():
+            if p.grad is not None:
+                param_norm = p.grad.data.norm(2)
+                total_norm += param_norm.item() ** 2
+        return total_norm ** 0.5
+
 class Agent():
     def __init__(self, alpha, beta, input_dims, tau, env, gamma=0.99, update_actor_interval=2,
                  warmup=1000, n_actions=2, max_size=1000000, layer1_size=400, layer2_size=300, batch_size=100, noise =0.1):
@@ -218,6 +226,10 @@ class Agent():
         q2_loss = F.mse_loss(target,q2)
         critic_loss = q1_loss + q2_loss
         critic_loss.backward()
+
+        critic1_grad_norm = get_gradient_norm(self.critic1)
+        critic2_grad_norm = get_gradient_norm(self.critic2)
+
         self.critic1.optimizer.step()
         self.critic2.optimizer.step()
 
@@ -234,6 +246,23 @@ class Agent():
         self.actor.optimizer.step()
 
         self.update_network_parameters()
+
+        wandb.log({
+            "critic_loss": critic_loss.item(),
+            "q1_loss": q1_loss.item(),
+            "q2_loss": q2_loss.item(),
+            "critic1_grad_norm": critic1_grad_norm,
+            "critic2_grad_norm": critic2_grad_norm,
+            "training_step": self.learn_step_counter,
+            "reward": reward
+        })
+
+        if self.learn_step_counter % self.update_actor_interval == 0:
+            actor_grad_norm = get_gradient_norm(self.actor)
+            wandb.log({
+                "actor_grad_norm": actor_grad_norm,
+                "actor_loss": actor_loss.item()
+            })
 
     def update_network_parameters(self, tau=None):
         if tau is None:#tau je onaj vrlo mali broj
@@ -297,7 +326,6 @@ if __name__=='__main__':
     training_period = 30
     n_envs = 4
     envs = SubprocVecEnv([make_env(i,training_period) for i in range(n_envs)])
-    logging.basicConfig(level=logging.INFO, format='%(message)s')
     input_dims = envs.observation_space.shape
     n_actions = envs.action_space.shape[0]
     agent = Agent(alpha=0.001, beta=0.001, input_dims=input_dims, tau=0.005, env=envs, n_actions=n_actions)
@@ -318,10 +346,14 @@ if __name__=='__main__':
         "episodes": n_games,
         })
     
+    if os.path.exists('./model/actor_td3'):
+        agent.load_models()
+
     best_score = -1000
     scores = np.zeros(n_envs)
     observations = envs.reset()
     completed = 0
+    score_history = []
 
     while completed < n_games:
         actions = np.array([agent.choose_action(o) for o in observations])
@@ -331,18 +363,21 @@ if __name__=='__main__':
             agent.remember(observations[i], actions[i], rewards[i], observations_[i], dones[i])
             scores[i] += rewards[i]
             if dones[i]:
+                score_history.append(scores[i])
                 wandb.log({"episode": completed, "score": scores[i]})
                 if scores[i]>best_score:
                     best_score=scores[i]
-                print(f"Episode {completed}, Score: {scores[i]}, Best score: {best_score}")
+
+                avg_score = np.mean(score_history[-100:])
+
+                if avg_score > best_score:
+                    best_score = avg_score
+                    agent.save_models()
+
+                print(f"Episode {completed}, Score: {scores[i]}, Best score: {best_score}, AVG score= {avg_score}")
                 scores[i] = 0
                 completed += 1
-            if "episode" in info and i==0:
-                episode_data = info["episode"]
-                logging.info(f"Episode {n_games}: "
-                            f"reward={episode_data['r']:.1f}, "
-                            f"length={episode_data['l']}, "
-                            f"time={episode_data['t']:.2f}s")
+           
 
         agent.learn()
         observations = observations_
