@@ -301,7 +301,7 @@ if __name__=='__main__':
     input_dims = envs.observation_space.shape
     n_actions = envs.action_space.shape[0]
     agent = Agent(alpha=0.001, beta=0.001, input_dims=input_dims, tau=0.005, env=envs, n_actions=n_actions)
-    n_games = 1000
+    n_games = 2000
     wandb.init(
         # Set the project where this run will be logged
         project="bipedal-Ql",
@@ -346,7 +346,7 @@ if __name__=='__main__':
 
         agent.learn()
         observations = observations_
-    video_folder = "path/to/your/video/folder"
+    video_folder = "/home/pfe-admin/Desktop/bipedal_projekat/lk-s-2025-bipedalni-robot/cartpole-training"
     video_files = glob.glob(os.path.join(video_folder, "*.mp4"))
 
     for video_path in video_files:

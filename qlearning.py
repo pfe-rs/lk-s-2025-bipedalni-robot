@@ -4,10 +4,12 @@ import math
 import random
 from collections import defaultdict
 import wandb
-
+import glob
+from gymnasium.wrappers import RecordVideo
+import os
 
 run=6
-NUM_OF_EPISODES = 1 #broj epizoda koliko treniramo model
+NUM_OF_EPISODES = 1000 #broj epizoda koliko treniramo model
 ALPHA = 0.01 #learning rate
 GAMMA = 0.99 #discount factor
 HIGHSCORE = -200 #treba da bude manji od najmanje vrednosti koju mozemo dobiti
@@ -32,7 +34,6 @@ actionBounds = (-1, 1)
 def discretizeState(state): #prebacuje kontinualne podatke u diskretne kako ne bismo imali beskonacno mnogo podataka u qTable
     discreteState = []
     for i in range (len(state)): #prolazimo kroz svih 14 state value-a
-        print()
         normalized = (state[i] - stateBounds[i][0]) / (stateBounds[i][1] - stateBounds[i][0]) #pretvaramo sve u range [0,1]
         scaled = normalized*19 #skaliramo jer koristimo 20 diskretnih binova
         index = int(scaled) 
@@ -112,7 +113,13 @@ def runOneEpisode(env, i, qTable):
     
 
 
-env = gym.make("BipedalWalker-v3", render_mode="human") # Inicijalizujemo enviroment
+env = gym.make("BipedalWalker-v3", render_mode="rgb_array") # Inicijalizujemo enviroment
+save_ep=125
+env = RecordVideo(env,
+                            video_folder="q-learning-training",
+                            name_prefix="training",
+                            episode_trigger=lambda x: x % save_ep== 0  # Only record every 250th episode
+                            )
 qTable = defaultdict( lambda: np.zeros((10, 10, 10, 10))) #pravimo qTable kao 4D niz
 
 wandb.init(
@@ -138,5 +145,14 @@ for i in range(1, NUM_OF_EPISODES+1):
     wandb.log({"episode": i, "epsilon":epsilon,"score": epScore})
 
 print("Zavrseno treniranje. HIGHSCORE: " + str(HIGHSCORE))
+video_folder = "/home/pfe-admin/Desktop/bipedal_projekat/lk-s-2025-bipedalni-robot/q-learning-training"
+video_files = glob.glob(os.path.join(video_folder, "*.mp4"))
+
+for video_path in video_files:
+    video_name = os.path.basename(video_path)
+    wandb.log({
+        video_name: wandb.Video(video_path, format="mp4")
+    })
+
 wandb.finish()
 env.close()
