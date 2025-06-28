@@ -7,6 +7,10 @@ import torch.optim as optim
 import os
 import wandb
 from stable_baselines3.common.vec_env import SubprocVecEnv
+from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
+import logging
+import glob
+
 
 class ReplayBuffer(): #cuva prethodno nauceno
     def __init__(self, max_size, input_shape, n_actions):
@@ -277,14 +281,23 @@ class Agent():
         self.target_critic1.load_checkpoint()
         self.target_critic2.load_checkpoint()
 
-def make_env():
+def make_env(i,training_period):
     def _init():
-        return gym.make('BipedalWalker-v3')
+        env=gym.make('BipedalWalker-v3',render_mode="rgb_array")
+        if(i==0):
+            env = RecordVideo(env,
+                            video_folder="cartpole-training",
+                            name_prefix="training",
+                            episode_trigger=lambda x: x % training_period == 0  # Only record every 250th episode
+                            )
+        return env
     return _init
 
 if __name__=='__main__':
+    training_period = 30
     n_envs = 4
-    envs = SubprocVecEnv([make_env() for _ in range(n_envs)])
+    envs = SubprocVecEnv([make_env(i,training_period) for i in range(n_envs)])
+    logging.basicConfig(level=logging.INFO, format='%(message)s')
     input_dims = envs.observation_space.shape
     n_actions = envs.action_space.shape[0]
     agent = Agent(alpha=0.001, beta=0.001, input_dims=input_dims, tau=0.005, env=envs, n_actions=n_actions)
@@ -324,8 +337,23 @@ if __name__=='__main__':
                 print(f"Episode {completed}, Score: {scores[i]}, Best score: {best_score}")
                 scores[i] = 0
                 completed += 1
+            if "episode" in info and i==0:
+                episode_data = info["episode"]
+                logging.info(f"Episode {n_games}: "
+                            f"reward={episode_data['r']:.1f}, "
+                            f"length={episode_data['l']}, "
+                            f"time={episode_data['t']:.2f}s")
+
         agent.learn()
         observations = observations_
+    video_folder = "path/to/your/video/folder"
+    video_files = glob.glob(os.path.join(video_folder, "*.mp4"))
+
+    for video_path in video_files:
+        video_name = os.path.basename(video_path)
+        wandb.log({
+            video_name: wandb.Video(video_path, fps=4, format="mp4")
+        })
 
     wandb.finish()
     envs.close()

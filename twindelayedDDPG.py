@@ -331,5 +331,5 @@ for i in range(n_games):
     print('episode ', i, 'score %.1f' % score,
             'average score %.1f' % avg_score)
 
-x = [i+1 for i in range(n_games)]
+
 wandb.finish()
