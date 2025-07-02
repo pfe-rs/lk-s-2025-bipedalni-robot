@@ -51,7 +51,7 @@ class ReplayBuffer(): #cuva prethodno nauceno
         return states, actions, rewards, new_states, dones #vraca ceo batch
     
 class CriticNetwork(nn.Module): #evaluira koliko je neka akcija dobra za neko stanje, dalje Q(s,a)
-    def __init__(self, beta, input_dims, fullyConnectedL1_dims, fullyConnectedL2_dims, n_actions, name, checkpoint_dir='./model'):
+    def __init__(self, beta, input_dims, fullyConnectedL1_dims, fullyConnectedL2_dims, n_actions, name, checkpoint_dir='td3\model'):
         #beta - learning rate, input_dims - dimenzije stanja (24) 
         super(CriticNetwork, self).__init__()
         self.input_dims = input_dims
@@ -90,7 +90,7 @@ class CriticNetwork(nn.Module): #evaluira koliko je neka akcija dobra za neko st
         self.load_state_dict(T.load(self.checkpoint_file))
 
 class ActorNetwork(nn.Module):
-    def __init__(self, alpha, input_dims, fullyConnectedL1_dims, fullyConnectedL2_dims, n_actions, name, checkpoint_dir='./model'):
+    def __init__(self, alpha, input_dims, fullyConnectedL1_dims, fullyConnectedL2_dims, n_actions, name, checkpoint_dir='td3\model'):
         super(ActorNetwork,self).__init__()
         self.input_dims = input_dims
         self.fullyConnectedL1_dims = fullyConnectedL1_dims
@@ -341,7 +341,7 @@ score_history = []
 
 
 # Ensure the 'model' directory exists
-if os.path.exists('./model/actor_td3'):
+if os.path.exists('td3\\model\\actor_td3'):
     agent.load_models()
 
 for i in range(n_games):
@@ -367,8 +367,8 @@ for i in range(n_games):
     print('episode ', i, 'score %.1f' % score,
             'average score %.1f' % avg_score)
     
-video_folder = "./td3_training_video"
-video_files = glob.glob(os.path.join(video_folder, "*.mp4"))
+video_folder = "td3\td3_training_video"
+video_files = glob.glob(os.path.join(video_folder, "*.mp4")) 
 
 for video_path in video_files:
     video_name = os.path.basename(video_path)

@@ -7,8 +7,9 @@ import torch.optim as optim
 import os
 from torch.distributions.normal import Normal
 import wandb
-from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
+from gymnasium.wrappers import RecordVideo
 import glob
+import math
 
 class ReplayBuffer(): #isti kao i za TD3
     def __init__(self, max_size, input_shape, n_actions):
@@ -43,7 +44,7 @@ class ReplayBuffer(): #isti kao i za TD3
         return states, actions, rewards, new_states, dones 
     
 class CriticNetwork(nn.Module): #evaluira koliko je neka akcija dobra za neko stanje, dalje Q(s,a); isti kao za TD3
-    def __init__(self, beta, input_dims, fullyConnectedL1_dims, fullyConnectedL2_dims, n_actions, name, checkpoint_dir='./model'):
+    def __init__(self, beta, input_dims, fullyConnectedL1_dims, fullyConnectedL2_dims, n_actions, name, checkpoint_dir='sac\model'):
         super(CriticNetwork, self).__init__()
         self.input_dims = input_dims
         self.fullyConnectedL1_dims = fullyConnectedL1_dims
@@ -81,7 +82,7 @@ class CriticNetwork(nn.Module): #evaluira koliko je neka akcija dobra za neko st
         self.load_state_dict(T.load(self.checkpoint_file))
 
 class ValueNetwork(nn.Module): #predvidja očekivanu Q vrednost po trenutnom policy-ju -> stabilizuje učenje 
-    def __init__(self, beta, input_dims, fullyConnectedL1_dims=256, fullyConnectedL2_dims=256, name="value", checkpoint_dir="./model"):
+    def __init__(self, beta, input_dims, fullyConnectedL1_dims=256, fullyConnectedL2_dims=256, name="value", checkpoint_dir="sac\model"):
         super(ValueNetwork, self).__init__()
         self.beta = beta
         self.input_dims = input_dims
@@ -116,7 +117,7 @@ class ValueNetwork(nn.Module): #predvidja očekivanu Q vrednost po trenutnom pol
         self.load_state_dict(T.load(self.checkpoint_file))
 
 class ActorNetwork(nn.Module):
-    def __init__(self, alpha, input_dims, max_action, fullyConnectedL1_dims=256, fullyConnectedL2_dims=256, n_actions=2, name='actor', checkpoint_dir="./model"):
+    def __init__(self, alpha, input_dims, max_action, fullyConnectedL1_dims=256, fullyConnectedL2_dims=256, n_actions=2, name='actor', checkpoint_dir="sac\model"):
         super(ActorNetwork, self).__init__()
         self.alpha = alpha
         self.input_dims = input_dims
@@ -186,8 +187,8 @@ def get_gradient_norm(model):
         return total_norm ** 0.5
 
 class Agent():
-    def __init__(self, alpha=0.0003, beta=0.0003, input_dims=[8],env=None, gamma=0.99, n_actions=2,
-                 max_size=1000000, tau = 0.005, layer1_size=256, layer2_size=256, batch_size=256, reward_scale=1.0):
+    def __init__(self, alpha=0.0004, beta=0.0004, input_dims=[8],env=None, gamma=0.98, n_actions=2,
+                 max_size=1000000, tau = 0.01, layer1_size=256, layer2_size=256, batch_size=256, reward_scale=1.0):
         self.gamma = gamma
         self.alpha = alpha
         self.tau = tau
@@ -309,48 +310,63 @@ class Agent():
 
         self.update_network_parameters()
 
-        wandb.log({
-            "critic_loss": critic_loss.item(),
-            "critic1_loss": critic1_loss.item(),
-            "critic2_loss": critic2_loss.item(),
-            "actor_loss": actor_loss.item(),
-            "value_loss": value_loss.item(),
-            "log_probs": log_probs.mean().item(),
-            "actor_grad_norm": actor_grad_norm,
-            "critic1_grad_norm": critic1_grad_norm,
-            "critic2_grad_norm": critic2_grad_norm,
-            "value_grad_norm": value_grad_norm,
-            "actor_weights": wandb.Histogram(self.actor.fullyConnectedL1.weight.data.cpu()),
-            "critic1_weights": wandb.Histogram(self.critic1.fullyConnectedL1.weight.data.cpu()),
-            "value_weights": wandb.Histogram(self.value.fullyConnectedL1.weight.data.cpu())
-        })
+        # wandb.log({
+        #     "critic_loss": critic_loss.item(),
+        #     "critic1_loss": critic1_loss.item(),
+        #     "critic2_loss": critic2_loss.item(),
+        #     "actor_loss": actor_loss.item(),
+        #     "value_loss": value_loss.item(),
+        #     "log_probs": log_probs.mean().item(),
+        #     "actor_grad_norm": actor_grad_norm,
+        #     "critic1_grad_norm": critic1_grad_norm,
+        #     "critic2_grad_norm": critic2_grad_norm,
+        #     "value_grad_norm": value_grad_norm,
+        #     "actor_weights": wandb.Histogram(self.actor.fullyConnectedL1.weight.data.cpu()),
+        #     "critic1_weights": wandb.Histogram(self.critic1.fullyConnectedL1.weight.data.cpu()),
+        #     "value_weights": wandb.Histogram(self.value.fullyConnectedL1.weight.data.cpu())
+        # })
 
-
+    def splitPenalty(self, hip_left, hip_right):
+        if hip_left < 0.26 and hip_right < 0.26:
+            #print('kazna spaga')
+            return -0.03
+        return 0
+    def standingReward(self, knee_left, knee_right, hull_height):
+        if 0.5 > knee_left > 0.3 and 0.5> knee_right > 0.3 and hull_height > 5.4:
+            #print('nagrada jer stoji')
+            return hull_height*0.1
+        return 0
+    def horizontalHullReward(self, hull_angle):
+        if 0 < hull_angle < 0.1:
+            return +0.01
+        return 0
+    
+WALK_SPEED = 10.0  # A reasonable scaling factor (tune if needed)
 
 if __name__ == '__main__':
-    training_period = 100
-    env = gym.make('BipedalWalker-v3', render_mode='rgb_array')
-    env = RecordVideo(env,
-                video_folder="sac_training_video",
-                name_prefix="training",
-                episode_trigger=lambda x: x % training_period == 0  # Only record every 250th episode
-                )
+    #training_period = 100
+    env = gym.make('BipedalWalker-v3', render_mode='human')
+    #env = RecordVideo(env,
+    #            video_folder="sac_training_video",
+    #            name_prefix="training",
+    #            episode_trigger=lambda x: x % training_period == 0  # Only record every 250th episode
+    #            )
     agent = Agent(input_dims=env.observation_space.shape, env=env,
             n_actions=env.action_space.shape[0])
     n_games = 1000
    
-    wandb.init(
-      project="bipedal-Ql",
-      name=f"SAC",
-      config={
-      "algorithm": "SAC",
-      "batch size":agent.batch_size,
-      "alpha": agent.alpha,
-      "gamma": agent.gamma,
-      "layer 1 size":agent.layer1_size,
-      "layer 2 size":agent.layer2_size,
-      "episodes": n_games,
-      })
+    # wandb.init(
+    #   project="bipedal-Ql",
+    #   name=f"SAC",
+    #   config={
+    #   "algorithm": "SAC",
+    #   "batch size":agent.batch_size,
+    #   "alpha": agent.alpha,
+    #   "gamma": agent.gamma,
+    #   "layer 1 size":agent.layer1_size,
+    #   "layer 2 size":agent.layer2_size,
+    #   "episodes": n_games,
+    #   })
 
     best_score = -1000
     score_history = []
@@ -364,9 +380,29 @@ if __name__ == '__main__':
         observation, info = env.reset()
         done = False
         score = 0
+        previous_x = env.unwrapped.hull.position.x
         while not done:
             action = agent.choose_action(observation)
             observation_, reward, terminated, trunctured, info = env.step(action)
+
+            hip_left = observation[14]
+            knee_left = observation[15]
+            hip_right = observation[16]
+            knee_right = observation[17]
+            hull_y = env.unwrapped.hull.position[1]
+            hull_angle = observation[0]
+
+            reward += agent.splitPenalty(hip_left, hip_right)
+            reward += agent.standingReward(knee_left, knee_right, hull_y)
+            reward += agent.horizontalHullReward(hull_angle)
+            #print(f"levo koleno: {knee_left}, desno koleno: {knee_right}, visina hulla: {hull_y}")
+            current_x = env.unwrapped.hull.position.x
+            forward_reward = (WALK_SPEED/2) * (current_x - previous_x)
+            previous_x = current_x  # update for next step
+
+            reward += forward_reward
+            #print(f"step_reward: {reward}, hull_x: {env.unwrapped.hull.position.x}")
+
             done = terminated or trunctured
             score += reward
             agent.remember(observation, action, reward, observation_, done)
@@ -374,7 +410,7 @@ if __name__ == '__main__':
                 agent.learn()
             observation = observation_
         avg_score = np.mean(score_history[-100:])
-        wandb.log({"episode": i, "score": score, "avg_score": avg_score})
+        #wandb.log({"episode": i, "score": score, "avg_score": avg_score})
         score_history.append(score)
         
 
@@ -385,14 +421,14 @@ if __name__ == '__main__':
 
         print('episode ', i, 'score %.1f' % score, 'avg_score %.1f' % avg_score)
 
-    video_folder = "./sac_training_video"
-    video_files = glob.glob(os.path.join(video_folder, "*.mp4")) 
+    #video_folder = "sac\sac_training_video"
+    #video_files = glob.glob(os.path.join(video_folder, "*.mp4")) 
 
-    for video_path in video_files:
-        video_name = os.path.basename(video_path)
-        wandb.log({
-            video_name: wandb.Video(video_path,  format="mp4")
-        })
+    #for video_path in video_files:
+    #    video_name = os.path.basename(video_path)
+    #    wandb.log({
+    #        video_name: wandb.Video(video_path,  format="mp4")
+    #    })
 
-    wandb.finish()
+   # wandb.finish()
     env.close()
